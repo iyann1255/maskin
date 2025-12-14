@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -14,25 +14,44 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
-# ADMIN_CHAT_ID: isi dengan ID kamu (angka), contoh: 5504473114
-ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
+# Banyak admin: pisahkan dengan koma
+# Contoh: "5504473114,123456789,-1009876543210"
+# Bisa user ID admin (angka positif) atau grup/admin log (chat id negatif)
+ADMIN_CHAT_IDS_RAW = os.getenv("ADMIN_CHAT_IDS", "").strip()
 
-# Cooldown anti spam (detik)
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "3"))
 
-# Simpan mapping: pesan admin (message_id) -> (user_id, original_user_message_id)
-# supaya saat admin reply, kita tahu harus kirim ke user yang mana.
-ADMIN_MSG_MAP: Dict[int, Tuple[int, Optional[int]]] = {}
+# Map per admin chat:
+# key: (admin_chat_id, admin_message_id_yang_di-reply) -> (user_id, original_user_message_id)
+ADMIN_MSG_MAP: Dict[Tuple[int, int], Tuple[int, Optional[int]]] = {}
 
-# Simpan last sent time per user
+# Anti spam ringan per user
 LAST_SENT: Dict[int, float] = {}
 
 
 def require_env():
     if not BOT_TOKEN:
         raise SystemExit("BOT_TOKEN belum di-set. Set ENV BOT_TOKEN dulu.")
-    if ADMIN_CHAT_ID == 0:
-        raise SystemExit("ADMIN_CHAT_ID belum di-set. Set ENV ADMIN_CHAT_ID (ID Telegram kamu).")
+    if not ADMIN_CHAT_IDS_RAW:
+        raise SystemExit("ADMIN_CHAT_IDS belum di-set. Set ENV ADMIN_CHAT_IDS (pisah koma).")
+
+
+def parse_admin_chats(raw: str) -> List[int]:
+    out: List[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.append(int(part))
+        except ValueError:
+            raise SystemExit(f"ADMIN_CHAT_IDS berisi value tidak valid: {part}")
+    if not out:
+        raise SystemExit("ADMIN_CHAT_IDS kosong / tidak valid.")
+    return out
+
+
+ADMIN_CHAT_IDS = parse_admin_chats(ADMIN_CHAT_IDS_RAW)
 
 
 def now_ts() -> float:
@@ -57,11 +76,15 @@ def user_header(update: Update) -> str:
     return f"👤 {name} {username}\n🆔 <code>{u.id}</code>"
 
 
+def admin_tag() -> str:
+    # Biar admin tahu cara bales
+    return "↩️ Reply pesan ini untuk balas user."
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Kirim masukan kamu di sini: teks, foto, video, atau file.\n"
-        "Nanti admin bakal bales lewat bot ini.\n\n"
-        "Tips: kalau laporan bug, kirim screenshot + langkah reproduksi biar admin gak nangis."
+        "Nanti admin bakal bales lewat bot ini."
     )
 
 
@@ -69,7 +92,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Cara pakai:\n"
         "1) Kirim teks / foto / video / file\n"
-        "2) Bot terusin ke admin\n"
+        "2) Bot terusin ke admin (multi-admin)\n"
         "3) Admin reply pesan itu → balasan nyampe ke kamu\n\n"
         "Perintah:\n"
         "/start /help"
@@ -84,38 +107,40 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
 
     if not cooldown_ok(user_id):
-        await msg.reply_text("Pelan-pelan boss, jeda bentar ya. 😄")
+        await msg.reply_text("Pelan-pelan boss, jeda bentar ya.")
         return
 
     mark_sent(user_id)
 
     header = user_header(update)
     caption = msg.caption or ""
-    text = msg.text or ""
 
-    # Kirim header dulu biar admin tahu konteks
-    sent_header = await context.bot.send_message(
-        chat_id=ADMIN_CHAT_ID,
-        text=f"📩 <b>MASUKAN BARU</b>\n{header}",
-        parse_mode=ParseMode.HTML,
-        disable_web_page_preview=True,
-    )
+    # Kirim ke semua admin chat
+    for admin_chat_id in ADMIN_CHAT_IDS:
+        try:
+            await context.bot.send_message(
+                chat_id=admin_chat_id,
+                text=f"📩 <b>MASUKAN BARU</b>\n{header}\n\n{admin_tag()}",
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
 
-    # Forward/copy konten user ke admin (biar admin bisa reply langsung)
-    # Kita gunakan copy_message biar media/file aman dan rapi.
-    sent_content = await context.bot.copy_message(
-        chat_id=ADMIN_CHAT_ID,
-        from_chat_id=msg.chat_id,
-        message_id=msg.message_id,
-        caption=caption if caption else None,
-        parse_mode=ParseMode.HTML,
-    )
+            sent_content = await context.bot.copy_message(
+                chat_id=admin_chat_id,
+                from_chat_id=msg.chat_id,
+                message_id=msg.message_id,
+                caption=caption if caption else None,
+                parse_mode=ParseMode.HTML,
+            )
 
-    # Simpan mapping: admin_message_id -> user_id
-    ADMIN_MSG_MAP[sent_content.message_id] = (user_id, msg.message_id)
+            # Simpan mapping spesifik admin chat + message id
+            ADMIN_MSG_MAP[(admin_chat_id, sent_content.message_id)] = (user_id, msg.message_id)
 
-    # Konfirmasi ke user
-    await msg.reply_text("Sip, masukan kamu udah nyampe ke admin. Kalau dibales, bakal masuk ke sini.")
+        except Exception as e:
+            # Jangan bikin user nunggu; log saja di stdout
+            print(f"[WARN] gagal kirim ke admin_chat_id={admin_chat_id}: {e}")
+
+    await msg.reply_text("Sip, masukan kamu udah terkirim ke admin. Nanti kalau dibales, masuk ke sini.")
 
 
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -123,37 +148,39 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not msg:
         return
 
-    # Pastikan hanya admin chat yang diproses
-    if msg.chat_id != ADMIN_CHAT_ID:
+    admin_chat_id = msg.chat_id
+
+    # Pastikan chat ini termasuk daftar admin
+    if admin_chat_id not in ADMIN_CHAT_IDS:
         return
 
-    # Harus reply ke pesan yang sebelumnya bot kirim/copy
+    # Harus reply
     if not msg.reply_to_message:
         return
 
-    replied_id = msg.reply_to_message.message_id
-    target = ADMIN_MSG_MAP.get(replied_id)
+    replied_msg_id = msg.reply_to_message.message_id
+    target = ADMIN_MSG_MAP.get((admin_chat_id, replied_msg_id))
     if not target:
-        # Bukan reply ke konten user yang kita map
         return
 
-    user_id, original_user_msg_id = target
+    user_id, _original_user_msg_id = target
 
-    # Kirim balasan admin ke user
-    # Kalau admin mengirim teks/media, kita copy juga biar fleksibel.
+    # Relay balasan admin ke user (teks/media/file)
     try:
         await context.bot.copy_message(
             chat_id=user_id,
-            from_chat_id=ADMIN_CHAT_ID,
+            from_chat_id=admin_chat_id,
             message_id=msg.message_id,
         )
-    except Exception:
-        # fallback: kalau copy gagal (jarang), minimal kirim teks
+        await msg.reply_text("✅ Balasan terkirim ke user.")
+    except Exception as e:
+        print(f"[ERROR] gagal kirim balasan ke user {user_id}: {e}")
         if msg.text:
-            await context.bot.send_message(chat_id=user_id, text=msg.text)
-
-    # Info kecil ke admin (optional)
-    await msg.reply_text("✅ Balasan terkirim ke user.")
+            try:
+                await context.bot.send_message(chat_id=user_id, text=msg.text)
+                await msg.reply_text("✅ Balasan teks terkirim ke user (fallback).")
+            except Exception as e2:
+                print(f"[ERROR] fallback juga gagal: {e2}")
 
 
 def main():
@@ -164,13 +191,14 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
 
-    # Admin reply handler (lebih dulu supaya gak ketangkep handler user)
-    app.add_handler(MessageHandler(filters.Chat(chat_id=ADMIN_CHAT_ID) & filters.REPLY, handle_admin_reply))
+    # Admin reply handler
+    # Kita pakai filters.REPLY dan biarkan handler sendiri yang cek chat_id admin.
+    app.add_handler(MessageHandler(filters.REPLY & ~filters.COMMAND, handle_admin_reply))
 
     # Semua pesan user (teks + media + dokumen)
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_user_message))
 
-    print("Feedback bot running...")
+    print("Feedback bot (multi-admin) running...")
     app.run_polling(close_loop=False)
 
 
