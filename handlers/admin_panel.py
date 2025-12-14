@@ -113,4 +113,3 @@ async def cmd_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Belum ada note.")
     text = "Notes terakhir:\n" + "\n".join([f"- [{x['created_at']}] {x['admin_id']}: {x['note']}" for x in reversed(items)])
     await update.message.reply_text(text)
-
