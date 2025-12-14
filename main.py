@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8501985808:AAGAAVdF7zaU1bzYjtmsH64irc0Mh99ieWk").strip()
 
 # Banyak admin: pisahkan dengan koma
 # Contoh: "5504473114,123456789,-1009876543210"
