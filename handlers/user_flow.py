@@ -1,23 +1,14 @@
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from telegram import InputFile
 
 import db
-from utils import category_keyboard, safe_user_header, fmt_admin_post, HELP_USER
-from config import ADMIN_LOG_CHAT_ID, DEFAULT_OPT_IN
+from utils import category_keyboard, safe_user_header, fmt_admin_post, HELP_USER, CATEGORY_LABEL
+from config import DEFAULT_OPT_IN
 
 STEP_PICK_CATEGORY = "PICK_CATEGORY"
 STEP_WAIT_DESC = "WAIT_DESC"
 STEP_WAIT_ATTACH = "WAIT_ATTACH"
-
-CATEGORY_LABEL = {
-    "BUG": "Bug",
-    "FEATURE": "Saran Fitur",
-    "REPORT": "Laporan User",
-    "COLLAB": "Kerja Sama",
-    "OTHER": "Lainnya",
-}
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -54,9 +45,6 @@ async def cb_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.edit_message_text(f"Oke. Kategori: {CATEGORY_LABEL.get(key, key)}\n\nSekarang kirim deskripsi singkat (teks).")
 
 async def on_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE, admin_targets: list[int]):
-    """
-    Handle user input depending on wizard step.
-    """
     msg = update.message
     user = update.effective_user
     if not msg or not user:
@@ -66,13 +54,11 @@ async def on_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE, ad
 
     st = db.wizard_get(user.id)
     if not st:
-        # tanpa wizard: arahkan saja
         await msg.reply_text("Kalau mau kirim masukan yang rapi, ketik /new dulu ya.")
         return
 
     step = st.get("step")
 
-    # Step: wait description
     if step == STEP_WAIT_DESC:
         if not msg.text or len(msg.text.strip()) < 5:
             await msg.reply_text("Deskripsinya minimal 5 karakter ya. Coba kirim lagi.")
@@ -84,9 +70,7 @@ async def on_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE, ad
         )
         return
 
-    # Step: wait attachment
     if step == STEP_WAIT_ATTACH:
-        # accept attachment OR user may send more text as extra (we ignore extra text, keep first desc)
         atype, fid, uniq = _extract_attachment(msg)
         if not atype:
             await msg.reply_text("Aku nunggu file bukti ya. Kalau mau lanjut tanpa bukti, ketik /skip")
@@ -96,7 +80,6 @@ async def on_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE, ad
         await _finalize_submit(update, context, admin_targets)
         return
 
-    # Step pick category should be via callback
     if step == STEP_PICK_CATEGORY:
         await msg.reply_text("Pilih kategori dulu dari tombol ya:", reply_markup=category_keyboard())
         return
@@ -110,12 +93,10 @@ async def cmd_skip(update: Update, context: ContextTypes.DEFAULT_TYPE, admin_tar
         return
     st = db.wizard_get(user.id)
     if not st or st.get("step") != STEP_WAIT_ATTACH:
-        await update.message.reply_text("Belum ada proses yang bisa di-skip. Mulai pakai /new")
-        return
+        return await update.message.reply_text("Belum ada proses yang bisa di-skip. Mulai pakai /new")
     await _finalize_submit(update, context, admin_targets)
 
 def _extract_attachment(msg):
-    # order: document, video, photo
     if msg.document:
         return ("document", msg.document.file_id, msg.document.file_unique_id)
     if msg.video:
@@ -154,36 +135,44 @@ async def _finalize_submit(update: Update, context: ContextTypes.DEFAULT_TYPE, a
     )
     db.inc_counter("feedback_created", 1)
 
-    # auto opt-in after first submit (if DEFAULT_OPT_IN true, already opt-in)
-    # keep user's current setting.
-
     header = safe_user_header(user)
     text = fmt_admin_post(header, cat_label, desc, fid, dedup_of)
 
-    # Send to admin targets (log group + any admin dms if configured there)
     for chat_id in admin_targets:
         try:
             sent = await context.bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
             db.relay_put(chat_id, sent.message_id, user.id, fid)
 
-            # send attachment if any
             if atype and afid:
                 if atype == "photo":
-                    sent2 = await context.bot.send_photo(chat_id=chat_id, photo=afid, caption=f"Attachment for <code>{fid}</code>", parse_mode=ParseMode.HTML)
+                    sent2 = await context.bot.send_photo(
+                        chat_id=chat_id, photo=afid,
+                        caption=f"Attachment for <code>{fid}</code>",
+                        parse_mode=ParseMode.HTML
+                    )
                     db.relay_put(chat_id, sent2.message_id, user.id, fid)
                 elif atype == "video":
-                    sent2 = await context.bot.send_video(chat_id=chat_id, video=afid, caption=f"Attachment for <code>{fid}</code>", parse_mode=ParseMode.HTML)
+                    sent2 = await context.bot.send_video(
+                        chat_id=chat_id, video=afid,
+                        caption=f"Attachment for <code>{fid}</code>",
+                        parse_mode=ParseMode.HTML
+                    )
                     db.relay_put(chat_id, sent2.message_id, user.id, fid)
                 elif atype == "document":
-                    sent2 = await context.bot.send_document(chat_id=chat_id, document=afid, caption=f"Attachment for <code>{fid}</code>", parse_mode=ParseMode.HTML)
+                    sent2 = await context.bot.send_document(
+                        chat_id=chat_id, document=afid,
+                        caption=f"Attachment for <code>{fid}</code>",
+                        parse_mode=ParseMode.HTML
+                    )
                     db.relay_put(chat_id, sent2.message_id, user.id, fid)
+
         except Exception as e:
             print(f"[WARN] send to admin chat {chat_id} failed: {e}")
 
     db.wizard_clear(user.id)
 
     if dedup_of:
-        await msg.reply_text(f"Masukan terkirim. ID: {fid}\nCatatan: terdeteksi mirip laporan sebelumnya (duplicate).")
+        await msg.reply_text(f"Masukan terkirim. ID: {fid}\nCatatan: terdeteksi duplicate (mirip laporan sebelumnya).")
     else:
         await msg.reply_text(f"Masukan terkirim. ID: {fid}\nKalau admin bales, masuk ke sini.")
 
