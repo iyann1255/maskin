@@ -47,37 +47,6 @@ async def cmd_deladmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.del_admin(uid)
     await update.message.reply_text(f"OK. Admin dihapus: {uid}")
 
-async def cmd_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    u = update.effective_user
-    if not u or not update.message:
-        return
-    if not db.is_admin(u.id, OWNER_ID):
-        return await update.message.reply_text("Nope. Kamu bukan admin.")
-    if len(context.args) < 2:
-        return await update.message.reply_text("Usage: /blacklist <user_id> <reason>")
-    try:
-        uid = int(context.args[0])
-    except:
-        return await update.message.reply_text("user_id harus angka.")
-    reason = " ".join(context.args[1:])
-    db.blacklist_add(uid, reason=reason, until_iso=None)
-    await update.message.reply_text(f"OK. Blacklist: {uid} | {reason}")
-
-async def cmd_unblacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    u = update.effective_user
-    if not u or not update.message:
-        return
-    if not db.is_admin(u.id, OWNER_ID):
-        return await update.message.reply_text("Nope. Kamu bukan admin.")
-    if not context.args:
-        return await update.message.reply_text("Usage: /unblacklist <user_id>")
-    try:
-        uid = int(context.args[0])
-    except:
-        return await update.message.reply_text("user_id harus angka.")
-    db.blacklist_del(uid)
-    await update.message.reply_text(f"OK. Unblacklist: {uid}")
-
 async def cmd_whitelist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     if not u or not update.message:
