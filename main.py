@@ -17,7 +17,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "8501985808:AAGAAVdF7zaU1bzYjtmsH64irc0Mh99ie
 # Banyak admin: pisahkan dengan koma
 # Contoh: "5504473114,123456789,-1009876543210"
 # Bisa user ID admin (angka positif) atau grup/admin log (chat id negatif)
-ADMIN_CHAT_IDS_RAW = os.getenv("ADMIN_CHAT_IDS", "").strip()
+ADMIN_CHAT_IDS_RAW = os.getenv("ADMIN_CHAT_IDS", "5504473114").strip()
 
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "3"))
 
