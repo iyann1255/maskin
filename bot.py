@@ -11,7 +11,6 @@ from handlers.user_flow import (
 from handlers.relay import on_admin_reply
 from handlers.admin_panel import (
     cmd_admins, cmd_addadmin, cmd_deladmin,
-    cmd_blacklist, cmd_unblacklist,
     cmd_whitelist, cmd_unwhitelist,
     cmd_note, cmd_notes
 )
