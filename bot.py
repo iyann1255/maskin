@@ -89,8 +89,6 @@ def main():
     app.add_handler(CommandHandler("admins", cmd_admins))
     app.add_handler(CommandHandler("addadmin", cmd_addadmin))
     app.add_handler(CommandHandler("deladmin", cmd_deladmin))
-    app.add_handler(CommandHandler("blacklist", cmd_blacklist))
-    app.add_handler(CommandHandler("unblacklist", cmd_unblacklist))
     app.add_handler(CommandHandler("whitelist", cmd_whitelist))
     app.add_handler(CommandHandler("unwhitelist", cmd_unwhitelist))
     app.add_handler(CommandHandler("note", cmd_note))
