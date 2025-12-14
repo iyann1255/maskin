@@ -45,17 +45,15 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Nope. Kamu bukan admin.")
 
     snap = db.stats_snapshot()
-    auto_blocked = db.get_counter("auto_blocked")
     created = db.get_counter("feedback_created")
+    opt_in = len(db.export_users_optin())
 
     text = (
         "📊 Stats (tanpa tiket)\n"
         f"- Users: {snap['users']}\n"
         f"- Feedback total: {snap['feedback']}\n"
         f"- Feedback created counter: {created}\n"
-        f"- Auto-blocked: {auto_blocked}\n"
-        f"- Blacklist size: {snap['blacklist']}\n"
         f"- Whitelist size: {snap['whitelist']}\n"
-        f"- Opt-in users: {len(db.export_users_optin())}\n"
+        f"- Opt-in users: {opt_in}\n"
     )
     await update.message.reply_text(text)
