@@ -1,5 +1,4 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
 
 CATEGORIES = [
     ("Bug", "BUG"),
@@ -8,6 +7,14 @@ CATEGORIES = [
     ("Kerja Sama", "COLLAB"),
     ("Lainnya", "OTHER"),
 ]
+
+CATEGORY_LABEL = {
+    "BUG": "Bug",
+    "FEATURE": "Saran Fitur",
+    "REPORT": "Laporan User",
+    "COLLAB": "Kerja Sama",
+    "OTHER": "Lainnya",
+}
 
 def category_keyboard() -> InlineKeyboardMarkup:
     rows = []
@@ -28,13 +35,14 @@ def fmt_admin_post(header: str, category: str, desc: str, fid: int, dedup_of: in
         f"{header}\n\n"
         f"🏷️ Category: <b>{category}</b>\n"
         f"🧾 ID: <code>{fid}</code>{extra}\n\n"
-        f"📝 <b>Deskripsi</b>\n{desc}"
+        f"📝 <b>Deskripsi</b>\n{desc}\n\n"
+        f"↩️ Reply pesan ini untuk balas user."
     )
 
 HELP_USER = (
     "Kirim masukan kamu lewat bot ini.\n\n"
     "Mulai cepat:\n"
-    "• /new → bikin masukan (pakai kategori + wizard)\n"
+    "• /new → bikin masukan (kategori + wizard)\n"
     "• /optout → berhenti menerima broadcast\n"
     "• /optin → aktifkan broadcast\n"
 )
@@ -44,8 +52,6 @@ HELP_ADMIN = (
     "• /admins\n"
     "• /addadmin <id> (owner)\n"
     "• /deladmin <id> (owner)\n"
-    "• /blacklist <id> <reason>\n"
-    "• /unblacklist <id>\n"
     "• /whitelist <id> [note]\n"
     "• /unwhitelist <id>\n"
     "• /note <feedback_id> <text>\n"
