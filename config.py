@@ -1,9 +1,9 @@
 import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8501985808:AAGAAVdF7zaU1bzYjtmsH64irc0Mh99ieWk").strip()
 
 # Owner (superadmin) wajib
-OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+OWNER_ID = int(os.getenv("OWNER_ID", "5504473114"))
 
 # Optional: grup admin log (lebih enak kalau ada)
 # contoh: -1001234567890
