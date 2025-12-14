@@ -3,7 +3,6 @@ from telegram.ext import ContextTypes
 
 import db
 from config import OWNER_ID
-from db import is_admin
 
 async def on_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -14,7 +13,6 @@ async def on_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not admin:
         return
 
-    # permission: only admin/owner can relay
     if not db.is_admin(admin.id, OWNER_ID):
         return
 
